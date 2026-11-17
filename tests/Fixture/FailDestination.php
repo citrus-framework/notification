@@ -16,7 +16,7 @@ use Citrus\Notification\NotificationException;
 use RuntimeException;
 
 /**
- * テスト用の送り先(いつも例外を投げる)
+ * テスト用の送信先(いつも例外を投げる)
  */
 class FailDestination implements Destination
 {
@@ -34,7 +34,7 @@ class FailDestination implements Destination
     /**
      * {@inheritDoc}
      */
-    public function send(string $text, Level $level): void
+    public function send(string $text, Level $level, ?string $title = null, array $fields = []): void
     {
         if ($this->notification === true)
         {

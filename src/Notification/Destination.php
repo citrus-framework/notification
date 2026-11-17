@@ -11,23 +11,25 @@ declare(strict_types=1);
 namespace Citrus\Notification;
 
 /**
- * 送り先(送り先の種類のクラスが実装する)
+ * 送信先(送信先の種類のクラスが実装する)
  */
 interface Destination
 {
     /**
      * constructor.
-     * @param array $configure 設定の送り先1つ分の配列
+     * @param array $configure 設定の送信先1つ分の配列
      * @throws NotificationException
      */
     public function __construct(array $configure);
 
     /**
-     * 知らせを送る
-     * @param string $text  文
-     * @param Level  $level 重要度
+     * 通知を送る
+     * @param string      $text  文
+     * @param Level       $level 重要度
+     * @param string|null $title タイトル(省けるときは null)
+     * @param Field[]     $fields フィールド(省けるときは空の配列)
      * @return void
      * @throws NotificationException 送れなかったとき
      */
-    public function send(string $text, Level $level): void;
+    public function send(string $text, Level $level, ?string $title = null, array $fields = []): void;
 }

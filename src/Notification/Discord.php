@@ -17,7 +17,7 @@ use Citrus\Http\HttpException;
 use Citrus\Http\MethodType;
 
 /**
- * Discord の Webhook への送り先
+ * Discord の Webhook への送信先
  */
 class Discord implements Destination
 {
@@ -35,6 +35,18 @@ class Discord implements Destination
 
     /** 枠の中の文の上限文字数 */
     public const DESCRIPTION_LIMIT = 4096;
+
+    /** 枠のタイトルの上限文字数 */
+    public const TITLE_LIMIT = 256;
+
+    /** フィールドの名前の上限文字数 */
+    public const FIELD_NAME_LIMIT = 256;
+
+    /** フィールドの値の上限文字数 */
+    public const FIELD_VALUE_LIMIT = 1024;
+
+    /** 空の名前・値の代わりに入れる文字 */
+    public const EMPTY_FIELD = '-';
 
     /** 切ったときに終わりに付ける文 */
     public const TRUNCATED_SUFFIX = '…（以下省略）';
@@ -62,14 +74,36 @@ class Discord implements Destination
      * {@inheritDoc}
      * @throws HttpException
      */
-    public function send(string $text, Level $level): void
+    public function send(string $text, Level $level, ?string $title = null, array $fields = []): void
     {
+        $embed = [];
+        // 空のタイトルは、タイトルが無いときと同じに扱う
+        if ($title !== null and $title !== '')
+        {
+            $embed['title'] = $this->truncate($title, self::TITLE_LIMIT);
+        }
+        // 空の文は、文の欄を付けない
+        if ($text !== '')
+        {
+            $embed['description'] = $this->truncate($text, self::DESCRIPTION_LIMIT);
+        }
+        if (count($fields) > 0)
+        {
+            $embed['fields'] = [];
+            foreach ($fields as $field)
+            {
+                $embed['fields'][] = [
+                    'name' => $this->truncate($this->fillEmpty($field->name), self::FIELD_NAME_LIMIT),
+                    'value' => $this->truncate($this->fillEmpty($field->value), self::FIELD_VALUE_LIMIT),
+                    'inline' => $field->inline,
+                ];
+            }
+        }
+        $embed['color'] = $this->color($level);
+
         $body = [
             'embeds' => [
-                [
-                    'description' => $this->truncate($text),
-                    'color' => $this->color($level),
-                ],
+                $embed,
             ],
             'allowed_mentions' => [
                 'parse' => [],
@@ -103,18 +137,29 @@ class Discord implements Destination
     }
 
     /**
-     * 上限を超える文を、頭を残して切る(付ける文を含めて上限に収める)
-     * @param string $text 文
+     * 空の文字列を、代わりの文字にする
+     * @param string $text 名前または値
      * @return string
      */
-    private function truncate(string $text): string
+    private function fillEmpty(string $text): string
     {
-        if (mb_strlen($text) <= self::DESCRIPTION_LIMIT)
+        return ($text === '' ? self::EMPTY_FIELD : $text);
+    }
+
+    /**
+     * 上限を超える文を、頭を残して切る(付ける文を含めて上限に収める)
+     * @param string $text  文
+     * @param int    $limit 上限文字数
+     * @return string
+     */
+    private function truncate(string $text, int $limit): string
+    {
+        if (mb_strlen($text) <= $limit)
         {
             return $text;
         }
 
-        $head_length = (self::DESCRIPTION_LIMIT - mb_strlen(self::TRUNCATED_SUFFIX));
+        $head_length = ($limit - mb_strlen(self::TRUNCATED_SUFFIX));
         return mb_substr($text, 0, $head_length) . self::TRUNCATED_SUFFIX;
     }
 }

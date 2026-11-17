@@ -13,7 +13,7 @@ namespace Citrus\Notification;
 use Citrus\CitrusException;
 
 /**
- * 知らせの例外
+ * 通知の例外
  */
 class NotificationException extends CitrusException
 {

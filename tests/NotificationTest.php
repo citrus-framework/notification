@@ -14,6 +14,7 @@ use Citrus\Logger;
 use Citrus\Logger\File;
 use Citrus\Notification;
 use Citrus\Notification\Discord;
+use Citrus\Notification\Field;
 use Citrus\Notification\Level;
 use Citrus\Notification\NotificationException;
 use PHPUnit\Framework\Attributes\Test;
@@ -23,7 +24,7 @@ use Test\Fixture\PlainClass;
 use Test\Fixture\RecordDestination;
 
 /**
- * 知らせのテスト
+ * 通知のテスト
  */
 class NotificationTest extends TestCase
 {
@@ -80,16 +81,41 @@ class NotificationTest extends TestCase
     }
 
     #[Test]
-    public function send_すべての送り先に送る()
+    public function send_すべての送信先に送る()
     {
         $ops = new RecordDestination();
         $dev = new RecordDestination();
 
         (new Notification(['ops' => $ops, 'dev' => $dev]))->send('終わりました', Level::SUCCESS);
 
-        $this->assertSame([['終わりました', Level::SUCCESS]], $ops->sent);
-        $this->assertSame([['終わりました', Level::SUCCESS]], $dev->sent);
+        $this->assertSame([['終わりました', Level::SUCCESS, null, []]], $ops->sent);
+        $this->assertSame([['終わりました', Level::SUCCESS, null, []]], $dev->sent);
         $this->assertSame('', $this->log());
+    }
+
+    #[Test]
+    public function send_タイトルをすべての送信先に渡す()
+    {
+        $ops = new RecordDestination();
+        $dev = new RecordDestination();
+
+        (new Notification(['ops' => $ops, 'dev' => $dev]))->send('終わりました', Level::SUCCESS, '[EventImport] 成功');
+
+        $this->assertSame([['終わりました', Level::SUCCESS, '[EventImport] 成功', []]], $ops->sent);
+        $this->assertSame([['終わりました', Level::SUCCESS, '[EventImport] 成功', []]], $dev->sent);
+    }
+
+    #[Test]
+    public function send_フィールドをすべての送信先に渡す()
+    {
+        $ops = new RecordDestination();
+        $dev = new RecordDestination();
+        $fields = [new Field('account', '0f3c'), new Field('count', '3', false)];
+
+        (new Notification(['ops' => $ops, 'dev' => $dev]))->send('文', Level::INFO, null, $fields);
+
+        $this->assertSame([['文', Level::INFO, null, $fields]], $ops->sent);
+        $this->assertSame([['文', Level::INFO, null, $fields]], $dev->sent);
     }
 
     #[Test]
@@ -99,7 +125,7 @@ class NotificationTest extends TestCase
 
         (new Notification(['ops' => $ops]))->send('文');
 
-        $this->assertSame([['文', Level::INFO]], $ops->sent);
+        $this->assertSame([['文', Level::INFO, null, []]], $ops->sent);
     }
 
     #[Test]
@@ -120,7 +146,7 @@ class NotificationTest extends TestCase
     }
 
     #[Test]
-    public function send_失敗は送り先の名前と例外の文でログに書かれる()
+    public function send_失敗は送信先の名前と例外の文でログに書かれる()
     {
         $notification = new Notification(['broken' => new FailDestination()]);
 
@@ -147,7 +173,7 @@ class NotificationTest extends TestCase
     }
 
     #[Test]
-    public function send_ログに書けなくても例外は投げず成功する送り先には届く()
+    public function send_ログに書けなくても例外は投げず成功する送信先には届く()
     {
         $after = new RecordDestination();
         $notification = new Notification(['broken' => new FailDestination(), 'after' => $after]);
@@ -164,11 +190,11 @@ class NotificationTest extends TestCase
             restore_error_handler();
         }
 
-        $this->assertSame([['文', Level::ERROR]], $after->sent);
+        $this->assertSame([['文', Level::ERROR, null, []]], $after->sent);
     }
 
     #[Test]
-    public function send_送り先が0件なら何もしない()
+    public function send_送信先が0件なら何もしない()
     {
         (new Notification([]))->send('文', Level::ERROR);
 
@@ -176,7 +202,7 @@ class NotificationTest extends TestCase
     }
 
     #[Test]
-    public function send_つながらなくてもログにWebhookのURLを入れず送り先の名前で示す()
+    public function send_つながらなくてもログにWebhookのURLを入れず送信先の名前で示す()
     {
         $url = 'http://127.0.0.1:1/api/webhooks/secret-token';
         $notification = new Notification(['ops' => new Discord(['webhook_url' => $url])]);
@@ -190,7 +216,7 @@ class NotificationTest extends TestCase
     }
 
     #[Test]
-    public function fromConfigures_設定から送り先が作られる()
+    public function fromConfigures_設定から送信先が作られる()
     {
         $notification = Notification::fromConfigures([
             'notification' => [
@@ -209,7 +235,7 @@ class NotificationTest extends TestCase
     }
 
     #[Test]
-    public function fromConfigures_ドメインごとの設定で送り先1つの項目だけを上書きできる()
+    public function fromConfigures_ドメインごとの設定で送信先1つの項目だけを上書きできる()
     {
         $notification = Notification::fromConfigures([
             'default' => [
@@ -258,7 +284,7 @@ class NotificationTest extends TestCase
     }
 
     #[Test]
-    public function fromConfigures_notificationの設定が無いと送り先は0件で何も送らない()
+    public function fromConfigures_notificationの設定が無いと送信先は0件で何も送らない()
     {
         $notification = Notification::fromConfigures([]);
 
@@ -270,7 +296,7 @@ class NotificationTest extends TestCase
     }
 
     #[Test]
-    public function fromConfigures_destinationsが無いと送り先は0件()
+    public function fromConfigures_destinationsが無いと送信先は0件()
     {
         $notification = Notification::fromConfigures(['notification' => []]);
 
@@ -279,7 +305,7 @@ class NotificationTest extends TestCase
     }
 
     #[Test]
-    public function fromConfigures_destinationsが空でも送り先は0件()
+    public function fromConfigures_destinationsが空でも送信先は0件()
     {
         $notification = Notification::fromConfigures(['notification' => ['destinations' => []]]);
 
@@ -315,7 +341,7 @@ class NotificationTest extends TestCase
     }
 
     #[Test]
-    public function fromConfigures_送り先の設定が配列でないとNotificationException()
+    public function fromConfigures_送信先の設定が配列でないとNotificationException()
     {
         $this->expectException(NotificationException::class);
 

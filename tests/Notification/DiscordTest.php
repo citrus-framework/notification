@@ -12,6 +12,7 @@ namespace Test\Notification;
 
 use Citrus\Http\HttpException;
 use Citrus\Notification\Discord;
+use Citrus\Notification\Field;
 use Citrus\Notification\Level;
 use Citrus\Notification\NotificationException;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -19,7 +20,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Discord の送り先のテスト(組み込みサーバーに実際に送る)
+ * Discord の送信先のテスト(組み込みサーバーに実際に送る)
  */
 class DiscordTest extends TestCase
 {
@@ -83,7 +84,7 @@ class DiscordTest extends TestCase
     }
 
     /**
-     * 送り先を作る
+     * 送信先を作る
      */
     private function discord(int $status = 204): Discord
     {
@@ -153,6 +154,172 @@ class DiscordTest extends TestCase
         $description = json_decode($this->received()['body'], true)['embeds'][0]['description'];
         $this->assertSame(4096, mb_strlen($description));
         $this->assertSame(str_repeat('あ', 4096 - 7) . '…（以下省略）', $description);
+    }
+
+    #[Test]
+    public function send_タイトルを渡すと枠のタイトルに入る()
+    {
+        $this->discord()->send('文', Level::SUCCESS, '[EventImport] 成功');
+
+        $embed = json_decode($this->received()['body'], true)['embeds'][0];
+        $this->assertSame('[EventImport] 成功', $embed['title']);
+        $this->assertSame('文', $embed['description']);
+    }
+
+    #[Test]
+    public function send_タイトルを渡さないとtitleのキーが無い()
+    {
+        $this->discord()->send('文', Level::INFO);
+
+        $embed = json_decode($this->received()['body'], true)['embeds'][0];
+        $this->assertArrayNotHasKey('title', $embed);
+    }
+
+    #[Test]
+    public function send_空のタイトルでもtitleのキーが無い()
+    {
+        $this->discord()->send('文', Level::INFO, '');
+
+        $embed = json_decode($this->received()['body'], true)['embeds'][0];
+        $this->assertArrayNotHasKey('title', $embed);
+    }
+
+    #[Test]
+    public function send_256文字ちょうどのタイトルはそのまま送られる()
+    {
+        $title = str_repeat('あ', 256);
+
+        $this->discord()->send('文', Level::INFO, $title);
+
+        $embed = json_decode($this->received()['body'], true)['embeds'][0];
+        $this->assertSame($title, $embed['title']);
+    }
+
+    #[Test]
+    public function send_256文字を超えるタイトルは頭を残して切り終わりに省略を付けて256文字に収める()
+    {
+        $this->discord()->send('文', Level::INFO, str_repeat('あ', 257));
+
+        $title = json_decode($this->received()['body'], true)['embeds'][0]['title'];
+        $this->assertSame(256, mb_strlen($title));
+        $this->assertStringEndsWith(Discord::TRUNCATED_SUFFIX, $title);
+        $this->assertSame(
+            str_repeat('あ', 256 - mb_strlen(Discord::TRUNCATED_SUFFIX)) . Discord::TRUNCATED_SUFFIX,
+            $title
+        );
+    }
+
+    #[Test]
+    public function send_空の文ではdescriptionのキーが無い()
+    {
+        $this->discord()->send('', Level::INFO, 'タイトル');
+
+        $embed = json_decode($this->received()['body'], true)['embeds'][0];
+        $this->assertArrayNotHasKey('description', $embed);
+        $this->assertSame('タイトル', $embed['title']);
+    }
+
+    #[Test]
+    public function send_フィールドは渡した順にfieldsへ入りinlineの既定はtrue()
+    {
+        $fields = [
+            new Field('account', '0f3c'),
+            new Field('count', '3', false),
+            new Field('state', 'ok', true),
+        ];
+
+        $this->discord()->send('文', Level::INFO, null, $fields);
+
+        $embed = json_decode($this->received()['body'], true)['embeds'][0];
+        $this->assertSame(
+            [
+                ['name' => 'account', 'value' => '0f3c', 'inline' => true],
+                ['name' => 'count', 'value' => '3', 'inline' => false],
+                ['name' => 'state', 'value' => 'ok', 'inline' => true],
+            ],
+            $embed['fields']
+        );
+    }
+
+    #[Test]
+    public function send_枠のキーの順はtitle_description_fields_color()
+    {
+        $this->discord()->send('文', Level::INFO, 'タイトル', [new Field('a', 'b')]);
+
+        $embed = json_decode($this->received()['body'], true)['embeds'][0];
+        $this->assertSame(['title', 'description', 'fields', 'color'], array_keys($embed));
+    }
+
+    #[Test]
+    public function send_フィールドが無いとfieldsのキーが無い()
+    {
+        $this->discord()->send('文', Level::INFO);
+
+        $embed = json_decode($this->received()['body'], true)['embeds'][0];
+        $this->assertArrayNotHasKey('fields', $embed);
+    }
+
+    #[Test]
+    public function send_フィールドが25個を超えても減らさずに送る()
+    {
+        $fields = [];
+        for ($i = 1; $i <= 26; $i++)
+        {
+            $fields[] = new Field('name' . $i, 'value' . $i);
+        }
+
+        $this->discord()->send('文', Level::INFO, null, $fields);
+
+        $embed = json_decode($this->received()['body'], true)['embeds'][0];
+        $this->assertCount(26, $embed['fields']);
+        $this->assertSame('name26', $embed['fields'][25]['name']);
+    }
+
+    #[Test]
+    public function send_空の名前と空の値はハイフンになる()
+    {
+        $this->discord()->send('文', Level::INFO, null, [new Field('', 'v'), new Field('n', ''), new Field('', '')]);
+
+        $fields = json_decode($this->received()['body'], true)['embeds'][0]['fields'];
+        $this->assertSame('-', $fields[0]['name']);
+        $this->assertSame('v', $fields[0]['value']);
+        $this->assertSame('n', $fields[1]['name']);
+        $this->assertSame('-', $fields[1]['value']);
+        $this->assertSame('-', $fields[2]['name']);
+        $this->assertSame('-', $fields[2]['value']);
+    }
+
+    #[Test]
+    public function send_名前256文字と値1024文字ちょうどはそのまま送られる()
+    {
+        $name = str_repeat('あ', 256);
+        $value = str_repeat('い', 1024);
+
+        $this->discord()->send('文', Level::INFO, null, [new Field($name, $value)]);
+
+        $field = json_decode($this->received()['body'], true)['embeds'][0]['fields'][0];
+        $this->assertSame($name, $field['name']);
+        $this->assertSame($value, $field['value']);
+    }
+
+    #[Test]
+    public function send_名前256文字と値1024文字を超えると切り終わりに省略を付けて上限に収める()
+    {
+        $this->discord()->send(
+            '文',
+            Level::INFO,
+            null,
+            [new Field(str_repeat('あ', 257), str_repeat('い', 1025))]
+        );
+
+        $field = json_decode($this->received()['body'], true)['embeds'][0]['fields'][0];
+        $suffix_length = mb_strlen(Discord::TRUNCATED_SUFFIX);
+        $this->assertSame(256, mb_strlen($field['name']));
+        $this->assertStringEndsWith(Discord::TRUNCATED_SUFFIX, $field['name']);
+        $this->assertSame(str_repeat('あ', 256 - $suffix_length) . Discord::TRUNCATED_SUFFIX, $field['name']);
+        $this->assertSame(1024, mb_strlen($field['value']));
+        $this->assertStringEndsWith(Discord::TRUNCATED_SUFFIX, $field['value']);
+        $this->assertSame(str_repeat('い', 1024 - $suffix_length) . Discord::TRUNCATED_SUFFIX, $field['value']);
     }
 
     #[Test]

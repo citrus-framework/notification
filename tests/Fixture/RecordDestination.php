@@ -14,14 +14,14 @@ use Citrus\Notification\Destination;
 use Citrus\Notification\Level;
 
 /**
- * テスト用の送り先(送った中身をためる)
+ * テスト用の送信先(送った中身をためる)
  */
 class RecordDestination implements Destination
 {
     /** @var array 設定 */
     public array $configure;
 
-    /** @var array[] 送った中身 [[文, 重要度], ...] */
+    /** @var array[] 送った中身 [[文, 重要度, タイトル, フィールド], ...] */
     public array $sent = [];
 
     /**
@@ -35,8 +35,8 @@ class RecordDestination implements Destination
     /**
      * {@inheritDoc}
      */
-    public function send(string $text, Level $level): void
+    public function send(string $text, Level $level, ?string $title = null, array $fields = []): void
     {
-        $this->sent[] = [$text, $level];
+        $this->sent[] = [$text, $level, $title, $fields];
     }
 }

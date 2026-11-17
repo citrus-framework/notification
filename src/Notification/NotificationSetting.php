@@ -13,7 +13,7 @@ namespace Citrus\Notification;
 use Citrus\Configure\Configurable;
 
 /**
- * 知らせの設定
+ * 通知の設定
  */
 class NotificationSetting extends Configurable
 {
